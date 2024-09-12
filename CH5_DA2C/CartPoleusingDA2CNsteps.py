@@ -29,6 +29,7 @@ class ActorCritic(torch.nn.Module):
 #                L--> 25 -> 1   critic : value func
 
 
+
     def forward(self,x):
         x = torch.nn.functional.normalize(x,dim=0)
         y = torch.nn.functional.relu(self.l1(x)) #linear calculate + relu
