@@ -27,7 +27,7 @@ class ActorCritic(torch.nn.Module):
         self.l3 = torch.nn.Linear(50,25)
         self.critic_l1 = torch.nn.Linear(25,1)
         #    4 -> 25 -> 50 -------> 2   actor : policy func
-        #                L--> 25 -> 1   critic : value func
+        #                L--> 25 -> 1   critic : Vvalue func
     def forward(self,x):
         x = torch.nn.functional.normalize(x,dim=0) #A
         y = torch.nn.functional.relu(self.l1(x)) #linear calculate + relu
@@ -37,28 +37,6 @@ class ActorCritic(torch.nn.Module):
         c = torch.nn.functional.relu(self.l3(y.detach()))
         critic = torch.tanh(self.critic_l1(c)) #B
         return actor,critic
-
-        # A
-        # torch.nn.functional.normalize : 
-        # v : tensor input in size (n0 ,n1 , ... , nk)  
-        # v = v / max( ||v|| )
-
-        # B
-        # Hyperbolic Tangent (Tanh)
-        # output a value  -1~1
-        # 單純cartpole 的 reward 就是 +1 or -1 符合情境所以拿來用
-        # 更 : 之後又覺得不是 : 此 adventage為(  normalize(discounted total Reward) - hyperbolic tan(V-value)(critic output) )
-
-        # 補充為什麼actor需要做log_softmax 而非softmax
-        # log_softmax 說明 : 做softmax 後的每一個數值都取log 
-        # => log(softmax(datas)) = log(e^datas / sigma(e^each_data) ) = log_softmax(datas)
-        # == datas - log(sigma (eachdata )) 
-        # 此數學化簡可以在取對數時可以避免數據overflow or underflow ，提高數值穩定性
-        # page 5-23
-
-        # 目前流程 : log_softmax -> Categorical(logits) 來輸入未正規化的資料 並輸出如softmax的結果
-        # 我的想法 : 只做softmax -> Categorical(probs) 輸入已經正規畫成機率的資料 直接輸出機率分布
-        # 我的想法容易使資料不穩定 雖然在數學式子裡面是等價的 但在程式中先取log會對穩定性更好
     
 # discrete  
 def worker(t,worker_model,counter,params):
@@ -66,8 +44,7 @@ def worker(t,worker_model,counter,params):
     worker_env.reset()
     worker_opt = torch.optim.Adam(lr=1e-4,params=worker_model.parameters())
     worker_opt.zero_grad()
-    for i in range(params['epochs']):
-        # percent_bar(i ,params['epochs'] )        
+    for i in range(params['epochs']):    
         worker_opt.zero_grad()
         values,logprobs,rewards,length = runEpisode(worker_env,worker_model)
         actor_loss,critic_loss,eplen = update_params(worker_opt,values,logprobs,rewards)
@@ -116,15 +93,6 @@ def runEpisode(worker_env,worker_model):
 
 # opt : optimizer
 def update_params(worker_opt,values,logprobs,rewards,clc = 0.1 , gamma = 0.95):
-    # r1 = torch.Tensor(rewards)
-    # r2 = r1.flip(dims=(0,))
-    # r3 = r2.view(-1)
-    # l1 = torch.Tensor(logprobs)
-    # l2 = l1.flip(dims=(0,))
-    # l3 = l2.view(-1)
-    # v1 = torch.Tensor(values)
-    # v2 = v1.flip(dims=(0,))
-    # v3 = v2.view(-1)
     rewards = torch.Tensor(rewards).flip(dims=(0,)).view(-1)
     logprobs = torch.stack(logprobs).flip(dims=(0,)).view(-1) # C
     values = torch.stack(values).flip(dims=(0,)).view(-1)
@@ -140,7 +108,7 @@ def update_params(worker_opt,values,logprobs,rewards,clc = 0.1 , gamma = 0.95):
     Returns = torch.nn.functional.normalize(Returns,dim=0)
     
     {
-        # C
+    # C
     # [ tensor([-10.]),
     #   tensor([-8.5000]),
     #   tensor([-7.0750]),
@@ -176,8 +144,8 @@ MasterNode.share_memory()
 
 processes = []
 params = {
-    'epochs': 600,
-    'n_workers': 5,
+    'epochs': 3000,
+    'n_workers': 1,
 }
 
 counter = mp.Value('i',0)

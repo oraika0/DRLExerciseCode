@@ -164,7 +164,15 @@ def update_params(worker_opt,Qvalues,Vvalues,logprobs,rewards,clc = 0.1 , gamma 
     }
     
     actor_loss = -1 * logprobs * (Returns - values.detach())
-    critic_loss = torch.pow(values - Returns , 2)
+    criticV_loss = torch.pow(Vvalues - Returns , 2)
+    
+    
+    # 記得對齊 只會有
+    criticQ_loss = torch.pow(Qvalues - (reward + Vvalues) )
+    
+    
+    
+    
     loss = actor_loss.sum() + clc * critic_loss.sum() # clc : actor critic 的重要程度調整
     loss.backward()
     worker_opt.step()
@@ -180,7 +188,7 @@ MasterNode.share_memory()
 
 processes = []
 params = {
-    'epochs': 600,
+    'epochs': 3000,
     'n_workers': 1,
 }
 
