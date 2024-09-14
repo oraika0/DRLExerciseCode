@@ -26,12 +26,12 @@ class ActorCritic(torch.nn.Module):
         self.actor_l1 = torch.nn.Linear(50,2)
         
         self.l3Q = torch.nn.Linear(50,25)
-        self.criticQ = torch.nn.Linear(25,1)
+        self.criticQ = torch.nn.Linear(25,2)
         
         self.l3V = torch.nn.Linear(50,25)
         self.criticV = torch.nn.Linear(25,1)
         #    4 -> 25 -> 50 -------> 2   actor : policy func
-        #                L--> 25 -> 1   criticQ : Qvalue func
+        #                L--> 25 -> 2   criticQ : Qvalue func
         #                L--> 25 -> 1   criticV : Vvalue func
         
         
@@ -80,8 +80,8 @@ def worker(t,worker_model,counter,params):
     for i in range(params['epochs']):
         # percent_bar(i ,params['epochs'] )        
         worker_opt.zero_grad()
-        Qvalues,Vvalues,logprobs,rewards,length = runEpisode(worker_env,worker_model)
-        actor_loss,critic_loss,eplen = update_params(worker_opt,Qvalues,Vvalues,logprobs,rewards)
+        Qvalues,Vvalues,extraV,logprobs,actions,rewards,length = runEpisode(worker_env,worker_model)
+        actor_loss,criticQ_loss,criticV_loss,eplen = update_params(worker_opt,Qvalues,Vvalues,extraV,logprobs,actions,rewards)
         counter.value = counter.value + 1
         
         if( (i+1) % 100 == 0):
@@ -92,7 +92,7 @@ def worker(t,worker_model,counter,params):
         
 def runEpisode(worker_env,worker_model):
     state = torch.from_numpy(worker_env.env.unwrapped.state).float()
-    Qvalues,Vvalues,logprobs,rewards = [],[],[],[]
+    Qvalues,Vvalues,logprobs,actions,rewards = [],[],[],[],[]
     done = False
     j = 0 #not used now , only counting epochs now , can be used for j < n_Steps && done == False
     while(done == False):
@@ -110,6 +110,7 @@ def runEpisode(worker_env,worker_model):
         action_dist = torch.distributions.Categorical(logits=logits)
         # 用我的logits的情形作出一個分布情況
         action = action_dist.sample()
+        actions.append(action)
         logprob_ = policy.view(-1)[action]
         # 不用np.choice的原因:保持在同一個框架不要亂跳 應該
         
@@ -123,25 +124,32 @@ def runEpisode(worker_env,worker_model):
             reward = 1.0
         rewards.append(reward)
         
+        
+    actions = torch.stack(actions).view(-1)  # 将 actions 转换为一维张量
+    actions = actions.long()  # 确保 actions 是 long 类型（索引需要 long）
+    _,_,extraV = worker_model(state)
     # V function(critic) output , picked action porb , reward , step length
-    return Qvalues,Vvalues,logprobs,rewards,len(rewards)
+    return Qvalues,Vvalues,extraV,logprobs,actions,rewards,len(rewards)
 
 # opt : optimizer
-def update_params(worker_opt,Qvalues,Vvalues,logprobs,rewards,clc = 0.1 , gamma = 0.95):
+def update_params(worker_opt,Qvalues,Vvalues,extraV,logprobs,actions,rewards,clc = 1 , gamma = 0.95):
 
     rewards = torch.Tensor(rewards).flip(dims=(0,)).view(-1)
-    logprobs = torch.stack(logprobs).flip(dims=(0,)).view(-1) # C
-    values = torch.stack(values).flip(dims=(0,)).view(-1)
+    logprobs = torch.stack(logprobs).view(-1) # C
+    Qvalues = torch.stack(Qvalues).view((-1,2))
+    chosen_Qvalues = Qvalues.gather(1, actions.unsqueeze(1)).squeeze(1)
+    Vvalues = torch.stack(Vvalues).view(-1)
+    
     Returns = []
     ret_ = torch.Tensor([0]) # each return
     for r in range(rewards.shape[0]):
         ret_ = rewards[r] + gamma * ret_
         Returns.append(ret_)
         
-    # Returns = torch.stack(Returns).view(-1)
-    Returns = torch.stack(Returns)
-    Returns = Returns.view(-1)
+    rewards = rewards.flip(dims = (0,))
+    Returns = torch.stack(Returns).flip(dims=(0,)).view(-1)
     Returns = torch.nn.functional.normalize(Returns,dim=0)
+    
     
     {
         # C
@@ -163,20 +171,29 @@ def update_params(worker_opt,Qvalues,Vvalues,logprobs,rewards,clc = 0.1 , gamma 
     # tensor([-10.0000,  -8.5000,  -7.0750,  -5.7212,  -4.4352])    
     }
     
-    actor_loss = -1 * logprobs * (Returns - values.detach())
+    # actor loss : sum (-logprob * (fQ(s,a) - fV(s))))
+    # or           sum (-logprob * (GAIN - fV(s))) 
+    actor_loss = -1 * logprobs * (chosen_Qvalues - Vvalues.detach())
+    # actor_loss = -1 * logprobs * (Returns - Vvalues.detach())
+    
+    # V value loss : sum(MSE(real return - value))
     criticV_loss = torch.pow(Vvalues - Returns , 2)
     
     
     # 記得對齊 只會有
-    criticQ_loss = torch.pow(Qvalues - (reward + Vvalues) )
+    # Q value loss :  sum(MSE(reward + V(s prime)))
     
     
+    criticQ_loss = torch.Tensor([])
+    for i in range(len(Vvalues) -1 ):    
+        q_loss = torch.pow(chosen_Qvalues[i] - (rewards[i] + Vvalues[i+1]) , 2)
+        criticQ_loss = torch.cat( (criticQ_loss , q_loss.unsqueeze(0)) )
+    criticQ_loss = torch.cat((criticQ_loss , ( torch.pow(chosen_Qvalues[len(Vvalues)-1] - (rewards[len(Vvalues)-1] + extraV).squeeze() , 2)).unsqueeze(0)))
     
-    
-    loss = actor_loss.sum() + clc * critic_loss.sum() # clc : actor critic 的重要程度調整
+    loss = actor_loss.sum() + clc * (criticV_loss.sum() + criticQ_loss.sum()) # clc : actor critic 的重要程度調整
     loss.backward()
     worker_opt.step()
-    return actor_loss,critic_loss,len(rewards)
+    return actor_loss,criticQ_loss,criticV_loss,len(rewards)
 
 
 
@@ -188,8 +205,8 @@ MasterNode.share_memory()
 
 processes = []
 params = {
-    'epochs': 3000,
-    'n_workers': 1,
+    'epochs': 1000,
+    'n_workers': 6,
 }
 
 counter = mp.Value('i',0)
