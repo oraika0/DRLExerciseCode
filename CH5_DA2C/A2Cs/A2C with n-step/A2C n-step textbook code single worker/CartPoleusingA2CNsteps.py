@@ -8,7 +8,6 @@ import torch.multiprocessing as mp
 import matplotlib 
 import matplotlib.pyplot as plt
 from typing import Type
-from torchviz import make_dot, make_dot_from_trace
 import os
 import time
 
@@ -255,7 +254,7 @@ worker_envTest.reset()
 trainedModelscore= []
 for i in range(500):    
     print("testing:",i)
-    _,_,_,length = runEpisode(worker_envTest,MasterNode)
+    _,_,_,length,_,_ = runEpisode(worker_envTest,MasterNode)
     trainedModelscore.append(length)
     
 # Plot 2: Individual episode lengths
