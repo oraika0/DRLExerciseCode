@@ -130,7 +130,7 @@ def update_params(worker_opt,values,logprobs,rewards,G,clc = 0.1 , gamma = 0.95)
     logprobs = torch.stack(logprobs).flip(dims=(0,)).view(-1)
     values = torch.stack(values).flip(dims=(0,)).view(-1)
     Returns = []
-    ret_ = G    
+    ret_ = G   
     for r in range(rewards.shape[0]):
         ret_ = rewards[r] + gamma * ret_
         # ret_ =  gamma * ret_
@@ -179,7 +179,7 @@ MasterNode.share_memory()
 
 processes = []
 params = {
-    'epochs': 5000,
+    'epochs': 8000,
     'n_workers': 1,
 }
 n_steps = 80
@@ -224,17 +224,13 @@ print("Total length of score:", len(score))
 # Convert score to a list for processing
 score = list(score)
 
-# Calculate running mean of episode lengths
-total = 0
 for i in range(len(score)):
-    if i >= 50:
-        total -= sum(score[i - 50:i]) / 50
-        total += sum(score[i - 49:i + 1]) / 50
-        mean = total / 50
+    if i >= 49:
+        mean = sum(score[i - 49:i+1]) / 50
     else:
-        total += sum(score[:i + 1]) / (i + 1)
-        mean = total / (i + 1)
+        mean = sum(score[:i+1]) / (i+1)
     running_mean.append(mean)
+
 
 # Plot 1: Running mean of episode lengths
 plt.figure(figsize=(17, 12))

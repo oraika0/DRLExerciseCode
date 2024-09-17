@@ -129,7 +129,7 @@ MasterNode.share_memory()
 
 processes = []
 params = {
-    'epochs': 5000,
+    'epochs': 8000,
     'n_workers': 1,
 }
 
@@ -196,16 +196,14 @@ print("Total length of score:", len(score))
 score = list(score)
 
 # Calculate running mean of episode lengths
-total = 0
+
 for i in range(len(score)):
-    if i >= 50:
-        total -= sum(score[i - 50:i]) / 50
-        total += sum(score[i - 49:i + 1]) / 50
-        mean = total / 50
+    if i >= 49:
+        mean = sum(score[i - 49:i+1]) / 50
     else:
-        total += sum(score[:i + 1]) / (i + 1)
-        mean = total / (i + 1)
+        mean = sum(score[:i+1]) / (i+1)
     running_mean.append(mean)
+
 
 # Plot 1: Running mean of episode lengths
 plt.figure(figsize=(17, 12))
