@@ -1,3 +1,7 @@
+# finish 
+# textbook code
+# A2C
+# 12000 * 1
 import torch 
 import numpy as np 
 import gymnasium as gym
@@ -16,38 +20,28 @@ def percent_bar(i,epochs):
         bar = '[' + '#' * progress_chars + '-' * (bar_length - progress_chars) + ']'
         percent = '{:.2%}'.format(progress)
         print(f'\r{bar} {percent}', end='', flush=True)
-
-class QACActor(torch.nn.Module):
+        
+class ActorCritic(torch.nn.Module):
     def __init__(self):
-        super(QACActor,self).__init__()
-        self.l1 = torch.nn.Linear(4,25)
-        self.l2 = torch.nn.Linear(25,50)  
-        self.actor_l1 = torch.nn.Linear(50,2)
-        #    4 -> 25 -> 50 -------> 2   actor : policy func
-        #                L--> 25 -> 2   critic : Qvalue func
-    def forward(self,x):
-        x = torch.nn.functional.normalize(x,dim=0) #A
-        y = torch.nn.functional.relu(self.l1(x)) #linear calculate + relu
-        y = torch.nn.functional.relu(self.l2(y))
-        actor = torch.nn.functional.log_softmax(self.actor_l1(y),dim=0)
-        return actor
-            
-class QACCritic(torch.nn.Module):
-    def __init__(self):
-        super(QACCritic,self).__init__()
+        super(ActorCritic,self).__init__()
         self.l1 = torch.nn.Linear(4,25)
         self.l2 = torch.nn.Linear(25,50)
+        
+        self.actor_l1 = torch.nn.Linear(50,2)
         self.l3 = torch.nn.Linear(50,25)
-        self.critic_l1 = torch.nn.Linear(25,2)
+        self.critic_l1 = torch.nn.Linear(25,1)
+        #    4 -> 25 -> 50 -------> 2   actor : policy func
+        #                L--> 25 -> 1   critic : Vvalue func
     def forward(self,x):
         x = torch.nn.functional.normalize(x,dim=0) #A
         y = torch.nn.functional.relu(self.l1(x)) #linear calculate + relu
         y = torch.nn.functional.relu(self.l2(y))
-        c = torch.nn.functional.relu(self.l3(y))
+        
+        actor = torch.nn.functional.log_softmax(self.actor_l1(y),dim=0)
+        c = torch.nn.functional.relu(self.l3(y.detach()))
         critic = torch.tanh(self.critic_l1(c)) #B
-        return critic
+        return actor,critic
     
-
 # discrete  
 def worker(t,worker_model,counter,params):
     worker_env = gym.make('CartPole-v1')
@@ -76,7 +70,7 @@ def runEpisode(worker_env,worker_model):
         # policy : actor R^2
         # value : critic -1 ~ 1
         policy,value = worker_model(state)
-        
+        values.append(value)
         
         # logits : a raw , unnormalized output data from each layer of nn before it is passed to the activating function
         logits = policy.view(-1) #植基整理成一維向量 (-1 的為自己依照大小補齊的維度)
@@ -85,8 +79,6 @@ def runEpisode(worker_env,worker_model):
         action_dist = torch.distributions.Categorical(logits=logits)
         # 用我的logits的情形作出一個分布情況
         action = action_dist.sample()
-        chosen_value = value.view(-1)[action]
-        values.append(chosen_value)
         logprob_ = policy.view(-1)[action]
         # 不用np.choice的原因:保持在同一個框架不要亂跳 應該
         
@@ -104,7 +96,7 @@ def runEpisode(worker_env,worker_model):
     return values,logprobs,rewards,len(rewards)
 
 # opt : optimizer
-def update_params(worker_opt,values,logprobs,rewards,clc = 0.1   , gamma = 0.95):
+def update_params(worker_opt,values,logprobs,rewards,clc = 0.1 , gamma = 0.95):
     rewards = torch.Tensor(rewards).flip(dims=(0,)).view(-1)
     logprobs = torch.stack(logprobs).flip(dims=(0,)).view(-1) # C
     values = torch.stack(values).flip(dims=(0,)).view(-1)
@@ -118,6 +110,7 @@ def update_params(worker_opt,values,logprobs,rewards,clc = 0.1   , gamma = 0.95)
     Returns = torch.stack(Returns)
     Returns = Returns.view(-1)
     Returns = torch.nn.functional.normalize(Returns,dim=0)
+
     
     actor_loss = -1 * logprobs * (Returns - values.detach())
     critic_loss = torch.pow(values - Returns , 2)
@@ -136,8 +129,8 @@ MasterNode.share_memory()
 
 processes = []
 params = {
-    'epochs': 1200,
-    'n_workers': 6,
+    'epochs': 5000,
+    'n_workers': 1,
 }
 
 counter = mp.Value('i',0)
@@ -164,32 +157,90 @@ for p in processes:
     p.terminate()
 
 # training finish
-# -------------------------------------------------------------
+
+
+
 
 
 # graph and result
+# n = params['n_workers']
+# score = []
+# running_mean = []
+# total = torch.Tensor([0])
+# mean = torch.Tensor([0])
+# while not buffer.empty():
+#     score.append(buffer.get(timeout=10))
+# print("length :",len(score))
+# for i in range( params['epochs']):
+#     if (i >= 50):
+#         total = total - sum(score[n*(i-50) : n*(i-50)+n])/n
+#         total = total + sum(score[n*i : n*i + n])/n
+#         mean = int(total/50)
+#     else :
+#         total = total + sum(score[n*i : n*i + n])/n
+#         mean = int ( total/(i+1))
+#     running_mean.append(mean)
+
+# Correctly aggregate scores from all workers
 n = params['n_workers']
 score = []
 running_mean = []
-total = torch.Tensor([0])
-mean = torch.Tensor([0])
+
+# Collect scores from the buffer
 while not buffer.empty():
     score.append(buffer.get(timeout=10))
-print("length :",len(score))
-for i in range( params['epochs']):
-    if (i >= 50):
-        total = total - sum(score[n*(i-50) : n*(i-50)+n])/n
-        total = total + sum(score[n*i : n*i + n])/n
-        mean = int(total/50)
-    else :
-        total = total + sum(score[n*i : n*i + n])/n
-        mean = int ( total/(i+1))
-    running_mean.append(mean)
-plt.figure(figsize=(17,12))
-plt.ylabel("Mean episode length")
-plt.xlabel("training epochs")
-plt.plot(running_mean)
-plt.show()        
 
-print(counter.value,processes[0].exitcode)
+print("Total length of score:", len(score))
+
+# Convert score to a list for processing
+score = list(score)
+
+# Calculate running mean of episode lengths
+total = 0
+for i in range(len(score)):
+    if i >= 50:
+        total -= sum(score[i - 50:i]) / 50
+        total += sum(score[i - 49:i + 1]) / 50
+        mean = total / 50
+    else:
+        total += sum(score[:i + 1]) / (i + 1)
+        mean = total / (i + 1)
+    running_mean.append(mean)
+
+# Plot 1: Running mean of episode lengths
+plt.figure(figsize=(17, 12))
+plt.plot(running_mean, color='blue')
+plt.title("Running Mean of Episode Lengths")
+plt.xlabel("Training Episodes")
+plt.ylabel("Mean Episode Length")
+plt.show()
+
+# Plot 2: Individual episode lengths
+plt.figure(figsize=(17, 12))
+plt.plot(score, color='green')
+plt.title("Episode Length per Episode")
+plt.xlabel("Training Episodes")
+plt.ylabel("Episode Length")
+plt.show()     
+# ------------------------------------------------------------
+# test model
+worker_envTest = gym.make('CartPole-v1')
+worker_envTest.reset()
+trainedModelscore= []
+for i in range(500):    
+    print("testing:",i)
+    _,_,_,length = runEpisode(worker_envTest,MasterNode)
+    trainedModelscore.append(length)
+    
+# Plot 2: Individual episode lengths
+plt.figure(figsize=(17, 12))
+plt.plot(trainedModelscore, color='red')
+plt.title("Trained model tset")
+plt.xlabel("testing times")
+plt.ylabel("Episode Length")
+plt.show()   
+
+# -------------------------------------------------------------    
+
+
     
