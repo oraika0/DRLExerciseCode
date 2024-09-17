@@ -120,7 +120,44 @@ def runEpisode(worker_env,worker_model):
 # 目前流程 : log_softmax -> Categorical(logits) 來輸入未正規化的資料 並輸出如softmax的結果
 # 我的想法 : 只做softmax -> Categorical(probs) 輸入已經正規畫成機率的資料 直接輸出機率分布
 # 我的想法容易使資料不穩定 雖然在數學式子裡面是等價的 但在程式中先取log會對穩定性更好
-
+def testmodel(worker_env,worker_model):
+    state = torch.from_numpy(np.array(worker_env.env.unwrapped.state)).float()
+    values,logprobs,rewards = [],[],[]
+    done = False
+    j = 0 #not used now , only counting epochs now , can be used for j < n_Steps && done == False
+    check = 1
+    G = torch.Tensor([0])
+    
+    while(done == False):
+        j += 1
+        # policy : actor R^2
+        # value : critic -1 ~ 1
+        policy,value = worker_model(state)
+        values.append(value)
+        # logits : a raw , unnormalized output data from each layer of nn before it is passed to the activatin function
+        logits = policy.view(-1) #植基整理成一維向量 (-1 的為自己依照大小補齊的維度)
+        # 但本來就是一維的了 我也不清楚有什麼用
+        
+        action_dist = torch.distributions.Categorical(logits=logits)
+        # 用我的logits的情形作出一個分布情況
+        action = action_dist.sample()
+        logprob_ = policy.view(-1)[action]
+        # 不用np.choice的原因:保持在同一個框架不要亂跳 應該
+        
+        
+        logprobs.append(logprob_)
+        state_ , _, done, _,info = worker_env.step(action.detach().numpy())
+        state = torch.from_numpy(state_).float()
+        if done : 
+            reward = -10
+            worker_env.reset() 
+            check = 1
+        else :
+            reward = 1.0
+            G = value.detach()
+            check = 0
+        rewards.append(reward)
+    return values,logprobs,rewards,len(rewards),G,check
 
 # opt : optimizer
 def update_params(worker_opt,values,logprobs,rewards,G,clc = 0.1 , gamma = 0.95):
@@ -254,13 +291,13 @@ worker_envTest.reset()
 trainedModelscore= []
 for i in range(500):    
     print("testing:",i)
-    _,_,_,length,_,_ = runEpisode(worker_envTest,MasterNode)
+    _,_,_,length,_,_ = testmodel(worker_envTest,MasterNode)
     trainedModelscore.append(length)
     
 # Plot 2: Individual episode lengths
 plt.figure(figsize=(17, 12))
 plt.plot(trainedModelscore, color='red')
-plt.title("Trained model tset")
+plt.title("Trained model test")
 plt.xlabel("testing times")
 plt.ylabel("Episode Length")
 plt.show()   

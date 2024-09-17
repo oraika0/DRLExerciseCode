@@ -327,7 +327,7 @@ for i in range(500):
 # Plot 2: Individual episode lengths
 plt.figure(figsize=(17, 12))
 plt.plot(trainedModelscore, color='red')
-plt.title("Trained model tset")
+plt.title("Trained model test")
 plt.xlabel("testing times")
 plt.ylabel("Episode Length")
 plt.show()   
