@@ -302,12 +302,12 @@ plt.show()
 #     running_mean.append(mean)
     
 # Plot 1: Running mean of episode lengths
-plt.figure(figsize=(17, 12))
-plt.plot(running_mean, color='blue')
-plt.title("Running Mean of Episode Lengths")
-plt.xlabel("Training Episodes")
-plt.ylabel("Mean Episode Length")
-plt.show()
+# plt.figure(figsize=(17, 12))
+# plt.plot(running_mean, color='blue')
+# plt.title("Running Mean of Episode Lengths")
+# plt.xlabel("Training Episodes")
+# plt.ylabel("Mean Episode Length")
+# plt.show()
 
 # Plot 2: Individual episode lengths
 plt.figure(figsize=(17, 12))

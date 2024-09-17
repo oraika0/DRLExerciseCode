@@ -210,25 +210,32 @@ for p in processes:
 # -------------------------------------------------------------
 
 
-# graph and result
+# Correctly aggregate scores from all workers
 n = params['n_workers']
 score = []
 running_mean = []
-total = torch.Tensor([0])
-mean = torch.Tensor([0])
+
+# Collect scores from the buffer
 while not buffer.empty():
     score.append(buffer.get(timeout=10))
-print("length :",len(score))
-for i in range( params['epochs']):
-    if (i >= 50):
-        total = total - sum(score[n*(i-50) : n*(i-50)+n])/n
-        total = total + sum(score[n*i : n*i + n])/n
-        mean = int(total/50)
-    else :
-        total = total + sum(score[n*i : n*i + n])/n
-        mean = int ( total/(i+1))
+
+print("Total length of score:", len(score))
+
+# Convert score to a list for processing
+score = list(score)
+
+# Calculate running mean of episode lengths
+total = 0
+for i in range(len(score)):
+    if i >= 50:
+        total -= sum(score[i - 50:i]) / 50
+        total += sum(score[i - 49:i + 1]) / 50
+        mean = total / 50
+    else:
+        total += sum(score[:i + 1]) / (i + 1)
+        mean = total / (i + 1)
     running_mean.append(mean)
-    
+
 # Plot 1: Running mean of episode lengths
 plt.figure(figsize=(17, 12))
 plt.plot(running_mean, color='blue')
