@@ -9,7 +9,6 @@ import torch.multiprocessing as mp
 import matplotlib 
 import matplotlib.pyplot as plt
 from typing import Type
-from torchviz import make_dot, make_dot_from_trace
 import os
 import time
 
