@@ -1,7 +1,7 @@
 # finish 
 # textbook code
-# A2C
-# 12000 * 1
+# DA2C
+# 2000 * 6
 import torch 
 import numpy as np 
 import gymnasium as gym
@@ -44,13 +44,15 @@ class ActorCritic(torch.nn.Module):
 # discrete  
 def worker(t,worker_model,counter,params):
     worker_env = gym.make('CartPole-v1')
+    print(worker_env.spec.max_episode_steps)
     worker_env.reset()
     worker_opt = torch.optim.Adam(lr=1e-4,params=worker_model.parameters())
     worker_opt.zero_grad()
     for i in range(params['epochs']):    
         worker_opt.zero_grad()
-        values,logprobs,rewards,length = runEpisode(worker_env,worker_model)
-        actor_loss,critic_loss,eplen = update_params(worker_opt,values,logprobs,rewards)
+        
+        values,logprobs,rewards,length = runEpisode(worker_env,worker_model,worker_opt)
+        # actor_loss,critic_loss,eplen = update_params(worker_opt,values,logprobs,rewards)
         counter.value = counter.value + 1
         
         if( (i+1) % 100 == 0):
@@ -59,13 +61,15 @@ def worker(t,worker_model,counter,params):
         print(f"\rsize : {buffer.qsize()}",end="",flush=True)
     print("worker",t,os.getpid(),"finish.")
         
-def runEpisode(worker_env,worker_model):
+def runEpisode(worker_env,worker_model,worker_opt):
     state = torch.from_numpy(worker_env.env.unwrapped.state).float()
     values,logprobs,rewards = [],[],[]
     done = False
-    j = 0 #not used now , only counting epochs now , can be used for j < n_Steps && done == False
+    j = 0
     while(done == False):
-        j += 1
+
+        
+        worker_opt.zero_grad()
         # policy : actor R^2
         # value : critic -1 ~ 1
         policy,value = worker_model(state)
@@ -79,11 +83,9 @@ def runEpisode(worker_env,worker_model):
         # 用我的logits的情形作出一個分布情況
         action = action_dist.sample()
         logprob_ = policy.view(-1)[action]
-        # 不用np.choice的原因:保持在同一個框架不要亂跳 應該
-        
         logprobs.append(logprob_)
-        state_ , _, done, _,info = worker_env.step(action.detach().numpy())
-        state = torch.from_numpy(state_).float()
+        next_state_ , _, done, _,info = worker_env.step(action.detach().numpy())
+        next_state = torch.from_numpy(next_state_).float()
         if done : 
             reward = -10
             worker_env.reset() 
@@ -156,7 +158,9 @@ for p in processes:
     p.terminate()
 
 # training finish
+# -------------------------------------------------------------
 
+# Correctly aggregate scores from all workers
 n = params['n_workers']
 score = []
 running_mean = []
@@ -170,15 +174,12 @@ print("Total length of score:", len(score))
 # Convert score to a list for processing
 score = list(score)
 
-# Calculate running mean of episode lengths
-
 for i in range(len(score)):
     if i >= 49:
         mean = sum(score[i - 49:i+1]) / 50
     else:
         mean = sum(score[:i+1]) / (i+1)
     running_mean.append(mean)
-
 
 # Plot 1: Running mean of episode lengths
 plt.figure(figsize=(17, 12))
@@ -188,13 +189,17 @@ plt.xlabel("Training Episodes")
 plt.ylabel("Mean Episode Length")
 plt.show()
 
+
+
 # Plot 2: Individual episode lengths
 plt.figure(figsize=(17, 12))
 plt.plot(score, color='green')
 plt.title("Episode Length per Episode")
 plt.xlabel("Training Episodes")
 plt.ylabel("Episode Length")
-plt.show()     
+plt.show()
+plt.show()        
+
 # ------------------------------------------------------------
 # test model
 worker_envTest = gym.make('CartPole-v1')
@@ -208,12 +213,10 @@ for i in range(500):
 # Plot 2: Individual episode lengths
 plt.figure(figsize=(17, 12))
 plt.plot(trainedModelscore, color='red')
-plt.title("Trained model tset")
+plt.title("Trained model test")
 plt.xlabel("testing times")
 plt.ylabel("Episode Length")
 plt.show()   
 
 # -------------------------------------------------------------    
-
-
     

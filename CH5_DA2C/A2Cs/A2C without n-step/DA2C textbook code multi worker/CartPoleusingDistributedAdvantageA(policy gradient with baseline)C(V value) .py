@@ -79,8 +79,6 @@ def runEpisode(worker_env,worker_model):
         # 用我的logits的情形作出一個分布情況
         action = action_dist.sample()
         logprob_ = policy.view(-1)[action]
-        # 不用np.choice的原因:保持在同一個框架不要亂跳 應該
-        
         logprobs.append(logprob_)
         state_ , _, done, _,info = worker_env.step(action.detach().numpy())
         state = torch.from_numpy(state_).float()
@@ -128,8 +126,8 @@ MasterNode.share_memory()
 
 processes = []
 params = {
-    'epochs': 1000,
-    'n_workers': 8,
+    'epochs': 500,
+    'n_workers': 7,
 }
 
 counter = mp.Value('i',0)
@@ -187,32 +185,7 @@ plt.xlabel("Training Episodes")
 plt.ylabel("Mean Episode Length")
 plt.show()
 
-# graph and result
-# n = params['n_workers']
-# score = []
-# running_mean = []
-# total = torch.Tensor([0])
-# mean = torch.Tensor([0])
-# while not buffer.empty():
-#     score.append(buffer.get(timeout=10))
-# print("length :",len(score))
-# for i in range( params['epochs']*params["n_workers"]):
-#     if (i >= 50):
-#         total = total - sum(score[n*(i-50) : n*(i-50)+n])/n
-#         total = total + sum(score[n*i : n*i + n])/n
-#         mean = int(total/50)
-#     else :
-#         total = total + sum(score[n*i : n*i + n])/n
-#         mean = int ( total/(i+1))
-#     running_mean.append(mean)
-    
-# Plot 1: Running mean of episode lengths
-# plt.figure(figsize=(17, 12))
-# plt.plot(running_mean, color='blue')
-# plt.title("Running Mean of Episode Lengths")
-# plt.xlabel("Training Episodes")
-# plt.ylabel("Mean Episode Length")
-# plt.show()
+
 
 # Plot 2: Individual episode lengths
 plt.figure(figsize=(17, 12))

@@ -1,7 +1,7 @@
 # finish 
 # textbook code
-# A2C
-# 12000 * 1
+# DA2C
+# 2000 * 6
 import torch 
 import numpy as np 
 import gymnasium as gym
@@ -79,8 +79,6 @@ def runEpisode(worker_env,worker_model):
         # 用我的logits的情形作出一個分布情況
         action = action_dist.sample()
         logprob_ = policy.view(-1)[action]
-        # 不用np.choice的原因:保持在同一個框架不要亂跳 應該
-        
         logprobs.append(logprob_)
         state_ , _, done, _,info = worker_env.step(action.detach().numpy())
         state = torch.from_numpy(state_).float()
@@ -105,13 +103,26 @@ def update_params(worker_opt,values,logprobs,rewards,clc = 0.1 , gamma = 0.95):
         ret_ = rewards[r] + gamma * ret_
         Returns.append(ret_)
         
+        
+        
+    rewards = rewards.flip(dims=(0,)).view(-1)
+    logprobs = logprobs.flip(dims=(0,)).view(-1) # C
+    values = values.flip(dims=(0,)).view(-1)
     # Returns = torch.stack(Returns).view(-1)
     Returns = torch.stack(Returns)
     Returns = Returns.view(-1)
     Returns = torch.nn.functional.normalize(Returns,dim=0)
-
     
-    actor_loss = -1 * logprobs * (Returns - values.detach())
+    # advantages = []
+    # for i in range(len(rewards)-1):
+    #     each_advantage = rewards[i] + gamma * values[i+1]  - values[i]
+    #     advantages.append(each_advantage)  
+    # advantages.append(rewards[len(rewards)-1] + 0 - values[len(rewards)-1])
+    
+    advantages = torch.nn.functional.normalize(rewards[:-1] + gamma * torch.atanh(values[1:]),dim=0) - values[:-1]
+    advantages = torch.cat([advantages, (rewards[-1] - values[-1]).unsqueeze(0)])  # Add last step
+    # advantages = torch.nn.functional.normalize(advantages)
+    actor_loss = -1 * logprobs * advantages
     critic_loss = torch.pow(values - Returns , 2)
     loss = actor_loss.sum() + clc * critic_loss.sum() # clc : actor critic 的重要程度調整
     loss.backward()
@@ -128,8 +139,8 @@ MasterNode.share_memory()
 
 processes = []
 params = {
-    'epochs': 500,
-    'n_workers': 7,
+    'epochs': 1000,
+    'n_workers': 8,
 }
 
 counter = mp.Value('i',0)
@@ -156,7 +167,9 @@ for p in processes:
     p.terminate()
 
 # training finish
+# -------------------------------------------------------------
 
+# Correctly aggregate scores from all workers
 n = params['n_workers']
 score = []
 running_mean = []
@@ -170,15 +183,12 @@ print("Total length of score:", len(score))
 # Convert score to a list for processing
 score = list(score)
 
-# Calculate running mean of episode lengths
-
 for i in range(len(score)):
     if i >= 49:
         mean = sum(score[i - 49:i+1]) / 50
     else:
         mean = sum(score[:i+1]) / (i+1)
     running_mean.append(mean)
-
 
 # Plot 1: Running mean of episode lengths
 plt.figure(figsize=(17, 12))
@@ -188,13 +198,17 @@ plt.xlabel("Training Episodes")
 plt.ylabel("Mean Episode Length")
 plt.show()
 
+
+
 # Plot 2: Individual episode lengths
 plt.figure(figsize=(17, 12))
 plt.plot(score, color='green')
 plt.title("Episode Length per Episode")
 plt.xlabel("Training Episodes")
 plt.ylabel("Episode Length")
-plt.show()     
+plt.show()
+plt.show()        
+
 # ------------------------------------------------------------
 # test model
 worker_envTest = gym.make('CartPole-v1')
@@ -208,12 +222,10 @@ for i in range(500):
 # Plot 2: Individual episode lengths
 plt.figure(figsize=(17, 12))
 plt.plot(trainedModelscore, color='red')
-plt.title("Trained model tset")
+plt.title("Trained model test")
 plt.xlabel("testing times")
 plt.ylabel("Episode Length")
 plt.show()   
 
 # -------------------------------------------------------------    
-
-
     
