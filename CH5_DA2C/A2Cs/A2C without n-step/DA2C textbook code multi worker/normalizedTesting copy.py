@@ -32,7 +32,6 @@ class ActorCritic(torch.nn.Module):
         #    4 -> 25 -> 50 -------> 2   actor : policy func
         #                L--> 25 -> 1   critic : Vvalue func
     def forward(self,x):
-        test = x
         x = torch.nn.functional.normalize(x,dim=0) #A
         y = torch.nn.functional.relu(self.l1(x)) #linear calculate + relu
         y = torch.nn.functional.relu(self.l2(y))
@@ -42,6 +41,7 @@ class ActorCritic(torch.nn.Module):
         critic = torch.tanh(self.critic_l1(c)) #B
         return actor,critic
     
+# discrete  
 def worker(t,worker_model,counter,params):
     worker_env = gym.make('CartPole-v1')
     worker_env.reset()
@@ -63,7 +63,7 @@ def runEpisode(worker_env,worker_model):
     state = torch.from_numpy(worker_env.env.unwrapped.state).float()
     values,logprobs,rewards = [],[],[]
     done = False
-    j = 0 #not used now , counting epochs, can be used for j < n_Steps && done == False
+    j = 0 #not used now , only counting epochs now , can be used for j < n_Steps && done == False
     while(done == False):
         j += 1
         # policy : actor R^2
@@ -72,7 +72,7 @@ def runEpisode(worker_env,worker_model):
         values.append(value)
         
         # logits : a raw , unnormalized output data from each layer of nn before it is passed to the activating function
-        logits = policy.view(-1) #直接整理成一維向量 (-1 的為自己依照大小補齊的維度)
+        logits = policy.view(-1) #植基整理成一維向量 (-1 的為自己依照大小補齊的維度)
         # 但本來就是一維的了 我也不清楚有什麼用
         
         action_dist = torch.distributions.Categorical(logits=logits)
@@ -103,9 +103,7 @@ def update_params(worker_opt,values,logprobs,rewards,clc = 0.1 , gamma = 0.95):
         ret_ = rewards[r] + gamma * ret_
         Returns.append(ret_)
         
-    # Returns = torch.stack(Returns).view(-1)
-    Returns = torch.stack(Returns)
-    Returns = Returns.view(-1)
+    Returns = torch.stack(Returns).view(-1)
     Returns = torch.nn.functional.normalize(Returns,dim=0)
 
     
@@ -126,8 +124,8 @@ MasterNode.share_memory()
 
 processes = []
 params = {
-    'epochs': 500,
-    'n_workers': 7,
+    'epochs': 1000,
+    'n_workers':8 ,
 }
 
 counter = mp.Value('i',0)

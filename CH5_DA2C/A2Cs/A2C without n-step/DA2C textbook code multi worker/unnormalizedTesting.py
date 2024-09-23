@@ -81,9 +81,9 @@ def runEpisode(worker_env,worker_model):
         action = action_dist.sample()
         logprob_ = policy.view(-1)[action]
         logprobs.append(logprob_)
-        state_ , _, done, _,info = worker_env.step(action.detach().numpy())
+        state_ , _, done, trunc,info = worker_env.step(action.detach().numpy())
         state = torch.from_numpy(state_).float()
-        if done : 
+        if done or trunc: 
             reward = -10
             worker_env.reset() 
         else :
@@ -104,11 +104,9 @@ def update_params(worker_opt,values,logprobs,rewards,clc = 0.1 , gamma = 0.95):
         ret_ = rewards[r] + gamma * ret_
         Returns.append(ret_)
         
-    # Returns = torch.stack(Returns).view(-1)
     Returns = torch.stack(Returns)
     Returns = Returns.view(-1)
     # Returns = torch.nn.functional.normalize(Returns,dim=0)
-
     
     actor_loss = -1 * logprobs * (Returns - values.detach())
     critic_loss = torch.pow(values - Returns , 2)
@@ -127,8 +125,8 @@ MasterNode.share_memory()
 
 processes = []
 params = {
-    'epochs': 1000,
-    'n_workers':8 ,
+    'epochs': 1350,
+    'n_workers':6 ,
 }
 
 counter = mp.Value('i',0)
@@ -169,8 +167,9 @@ while not buffer.empty():
 print("Total length of score:", len(score))
 
 # Convert score to a list for processing
-score = list(score)
 
+score = list(score)
+print("scoring")
 for i in range(len(score)):
     if i >= 49:
         mean = sum(score[i - 49:i+1]) / 50
@@ -195,7 +194,6 @@ plt.title("Episode Length per Episode")
 plt.xlabel("Training Episodes")
 plt.ylabel("Episode Length")
 plt.show()
-plt.show()        
 
 # ------------------------------------------------------------
 # test model
