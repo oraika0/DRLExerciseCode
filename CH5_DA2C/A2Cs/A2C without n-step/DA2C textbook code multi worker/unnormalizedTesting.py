@@ -44,7 +44,7 @@ class ActorCritic(torch.nn.Module):
     
 # discrete  
 def worker(t,worker_model,counter,params):
-    worker_env = gym.make('CartPole-v1')
+    worker_env = gym.make('CartPole-v1',max_episode_steps=8000)
     worker_env.reset()
     worker_opt = torch.optim.Adam(lr=1e-4,params=worker_model.parameters())
     worker_opt.zero_grad()
@@ -64,8 +64,9 @@ def runEpisode(worker_env,worker_model):
     state = torch.from_numpy(worker_env.env.unwrapped.state).float()
     values,logprobs,rewards = [],[],[]
     done = False
-    j = 0 #not used now , only counting epochs now , can be used for j < n_Steps && done == False
-    while(done == False):
+    trunc = False
+    j = 0 
+    while((done or trunc) == False):
         j += 1
         # policy : actor R^2
         # value : critic -1 ~ 1
@@ -126,7 +127,7 @@ MasterNode.share_memory()
 processes = []
 params = {
     'epochs': 1350,
-    'n_workers':6 ,
+    'n_workers':8 ,
 }
 
 counter = mp.Value('i',0)
@@ -197,7 +198,7 @@ plt.show()
 
 # ------------------------------------------------------------
 # test model
-worker_envTest = gym.make('CartPole-v1')
+worker_envTest = gym.make('CartPole-v1',max_episode_steps=8000)
 worker_envTest.reset()
 trainedModelscore= []
 for i in range(500):    
