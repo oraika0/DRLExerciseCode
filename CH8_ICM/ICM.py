@@ -49,7 +49,7 @@ class ExperienceReplay:
         self.batch_size = batch_size
         self.memory = []
         self.counter = 0
-
+        
     def suffle_memory(self):
         shuffle(self.memory)
         
@@ -83,10 +83,100 @@ class ExperienceReplay:
         reward_batch = torch.Tensor([x[2] for x in batch]) 
         state2_batch = torch.stack([x[3].squeeze(dim=0) for x in batch],dim=0)
         return state1_batch,action_batch,reward_batch,state2_batch
+    
+class Phi (torch.nn.Module):
+    def __init__(self):
+        super(Phi,self).__init__()
+        self.conv1 = torch.nn.Conv2d(3,32,kernel_size=(3,3),stride=2,padding=1)
+        self.conv2 = torch.nn.Conv2d(32,32,kernel_size=(3,3),stride=2,padding=1)
+        self.conv3 = torch.nn.Conv2d(32,32,kernel_size=(3,3),stride=2,padding=1)
+        self.conv4 = torch.nn.Conv2d(32,32,kernel_size=(3,3),stride=2,padding=1)
+        
+    def forward(self,x):
+        x = torch.nn.functional.normalize(x)
+        y = torch.nn.functional.elu(self.conv1(x))
+        y = torch.nn.functional.elu(self.conv2(y))
+        y = torch.nn.functional.elu(self.conv3(y))
+        y = torch.nn.functional.elu(self.conv4(y))
+        y = y.flatten(start_dim=1)
+        
+class Gnet(torch.nn.Module):
+    def __init__(self):
+        super(Gnet,self).__init__()
+        self.l1 = torch.nn.Linear(576,256)
+        self.l2 = torch.nn.Linear(256,12)
                 
+    def forard(self,state1,state2):
+        x = torch.cat((state1,state2),dim=1)
+        y = self.l1(x)
+        y = torch.nn.ReLU(y)
+        y = self.l2(x)
+        y = torch.nn.Softmax(y,dim=1)
+        return y        
+
+class Fnet(torch.nn.Module):
+    def __init__(self):
+        super(Fnet,self).__init__()
+        self.l1 = torch.nn.Linear(300,256)
+        self.l2 = torch.nn.Linear(256,288)
+                
+    def forard(self,state,action):
+        action_ = torch.zeros(action.shape(),12)
+        indicies = torch.stack((torch.arange(state.shape[0]),action.squeeze()),dim=0)
+        indicies = indicies.tolist()
+        action_[indicies] = 1
+        x = torch.cat((state,action_),dim=1)
+        y = self.l1(x)
+        y = torch.nn.ReLU(y)
+        y = self.l2(x)
+        return y        
+
+class QNetwork (torch.nn.Module):
+    def __init__(self):
+        super(QNetwork,self).__init__()
+        self.conv1 = torch.nn.Conv2d(3,32,kernel_size=(3,3),stride=2,padding=1)
+        self.conv2 = torch.nn.Conv2d(32,32,kernel_size=(3,3),stride=2,padding=1)
+        self.conv3 = torch.nn.Conv2d(32,32,kernel_size=(3,3),stride=2,padding=1)
+        self.conv4 = torch.nn.Conv2d(32,32,kernel_size=(3,3),stride=2,padding=1)
+        self.l1 = torch.nn.Linear(288, 100)
+        self.l2 = torch.nn.linear(100,12)
+            
+    def forward(self,x):
+        x = torch.nn.functional.normalize(x)
+        y = torch.nn.functional.elu(self.conv1(x))
+        y = torch.nn.functional.elu(self.conv2(y))
+        y = torch.nn.functional.elu(self.conv3(y))
+        y = torch.nn.functional.elu(self.conv4(y))
+        y = y.flatten(start_dim=2)
+        y = y.view(y.shape[0],-1,32)
+        y = y.flatten(start_dim=1)
+        y = torch.nn.functional.elu(self.l1(y))
+        y = self.l2(y)
+        return y 
+    
 env = gym_super_mario_bros.make('SuperMarioBros-v0')
 env = JoypadSpace(env,COMPLEX_MOVEMENT)
 done = True 
+
+params = {
+    'batch_size' :150,
+    'beta' : 0.2,
+    'lambda' : 0.1,
+    'gamma' : 0.2,
+    'max_episode_len' : 100,
+    'min_progress' : 15,
+    'action_repeats' : 6, #被選到的action 在訓練時會連做6次
+    'frames_per_state' : 3 
+}
+
+replay = ExperienceReplay(N = 1000,batch_size=params['batch_size'])
+Qmodel = QNetwork()
+encoder = Phi()
+forward_model = Fnet()
+inverse_model = Gnet()
+forward_loss = torch.nn.MSELoss(reduction='none')
+inverse_loss = torch.nn.CrossEntropyLoss(reduction='none')
+
 
 for step in range(30):
     if done :
@@ -105,31 +195,19 @@ for step in range(30):
 
 #A
 {
-# actions for very simple movement
-# SIMPLE_MOVEMENT = [
-#     ['NOOP'],
-#     ['right'],
-#     ['right', 'A'],
-#     ['right', 'B'],
-#     ['right', 'A', 'B'],
-#     ['A'],
-#     ['left'],
-# ]
-
-
 # # actions for more complex movement
 # COMPLEX_MOVEMENT = [
-#     ['NOOP'],
-#     ['right'],
-#     ['right', 'A'],
-#     ['right', 'B'],
-#     ['right', 'A', 'B'],
-#     ['A'],
-#     ['left'],
-#     ['left', 'A'],
-#     ['left', 'B'],
-#     ['left', 'A', 'B'],
-#     ['down'],
-#     ['up'],
+# 0    ['NOOP'],
+# 1    ['right'],
+# 2    ['right', 'A'],
+# 3    ['right', 'B'],
+#  4   ['right', 'A', 'B'],
+#  5   ['A'],
+#  6   ['left'],
+#  7   ['left', 'A'],
+#  8   ['left', 'B'],
+#  9   ['left', 'A', 'B'],
+#  10  ['down'],
+#  11  ['up'],
 # ]
 }
