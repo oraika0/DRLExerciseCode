@@ -99,6 +99,7 @@ class Phi (torch.nn.Module):
         y = torch.nn.functional.elu(self.conv3(y))
         y = torch.nn.functional.elu(self.conv4(y))
         y = y.flatten(start_dim=1)
+        return y
         
 class Gnet(torch.nn.Module):
     def __init__(self):
@@ -109,8 +110,8 @@ class Gnet(torch.nn.Module):
     def forward(self,state1,state2):
         x = torch.cat((state1,state2),dim=1)
         y = self.l1(x)
-        y = torch.nn.ReLU(y)
-        y = self.l2(x)
+        y = torch.nn.functional.relu(y)
+        y = self.l2(y)
         y = torch.nn.Softmax(y,dim=1)
         return y        
 
@@ -121,14 +122,14 @@ class Fnet(torch.nn.Module):
         self.l2 = torch.nn.Linear(256,288)
                 
     def forward(self,state,action):
-        action_ = torch.zeros(action.shape(),12)
+        action_ = torch.zeros(action.shape[0],12)
         indicies = torch.stack((torch.arange(state.shape[0]),action.squeeze()),dim=0)
         indicies = indicies.tolist()
         action_[indicies] = 1
         x = torch.cat((state,action_),dim=1)
         y = self.l1(x)
-        y = torch.nn.ReLU(y)
-        y = self.l2(x)
+        y = torch.nn.functional.relu(y)
+        y = self.l2(y)
         return y        
 
 class QNetwork (torch.nn.Module):
@@ -158,8 +159,8 @@ def loss_fn(qloss,forward_loss,inverse_loss):
     loss_ = (1-params['beta']) * forward_loss
     loss_ += params['beta'] * inverse_loss
     loss_ = loss_.sum() / loss_.flatten().shape[0]
-    loss_ += params['lambda'] * qloss
-    return loss_
+    loss = loss_ + params['lambda'] * qloss
+    return loss
 
 def reset_env():
     env.reset()
@@ -254,7 +255,7 @@ last_x_pos = 40
 ep_lengths = []
 use_explicit = False
 for i in range(epochs):
-    print('Epochs', i, ':' , 'x_pos',last_x_pos,flush=False)
+    print('Epochs', i, ':' , 'x_pos',last_x_pos)
     optim.zero_grad()
     episode_length += 1
     q_val_pred = Qmodel(state1)
@@ -286,7 +287,7 @@ for i in range(epochs):
     replay.add_memory(state1,action,e_reward,state2)
     e_reward = 0
     if episode_length > params['max_episode_len']:
-        if (info['x_pos'] - last_x_pos) < params['max_episode_len']:
+        if (info['x_pos'] - last_x_pos) < params['min_progress']:
             done = True
         else :
             last_x_pos = info['x_pos']
