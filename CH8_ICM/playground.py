@@ -54,7 +54,7 @@ while True:
 
     # Step the environment
     state, reward, done, info = env.step(action)
-
+    print('x_pos :',info['x_pos'])
 
     frame = env.render('rgb_array')
     frame = np.fliplr(frame)  # Flip the frame vertically

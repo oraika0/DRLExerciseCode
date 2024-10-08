@@ -9,6 +9,9 @@ import torch
 from collections import deque
 from random import shuffle
 
+device = torch.device("cuda")
+print(torch.cuda.get_device_name(0)) 
+
 def downscale_obs(obs, new_size = (42,42), to_gray = True):
     if to_gray:
         return resize(obs,new_size,anti_aliasing = True).max(axis = 2)
@@ -16,13 +19,13 @@ def downscale_obs(obs, new_size = (42,42), to_gray = True):
         return resize(obs,new_size,anti_aliasing = True)
 
 def prepare_state(state):
-    return torch.from_numpy(downscale_obs(state,to_gray=True)).float().unsqueeze(dim=0)
+    return torch.from_numpy(downscale_obs(state,to_gray=True)).float().unsqueeze(dim=0).to(device)
 
 def prepare_multi_state(state1,state2):
 # state1 : old tensor with recently 3 frame images with batch dim (downscaled)(batch * 3 * height * width)
 # state2 : new np array with the newest 1 frame image(undownscaled)
-    state1 = state1.clone()
-    tmp = torch.from_numpy(downscale_obs(state2)).float()
+    state1 = state1.clone().to(device)
+    tmp = torch.from_numpy(downscale_obs(state2)).float().to(device)
     
     state1[0][0] = state1[0][1]
     state1[0][1] = state1[0][2]
@@ -30,8 +33,8 @@ def prepare_multi_state(state1,state2):
     return state1
     
 def prepare_initial_state(state,N=3):
-    state_ = torch.from_numpy(downscale_obs(state,to_gray=True)).float()
-    tmp = state_.repeat((N,1,1))
+    state_ = torch.from_numpy(downscale_obs(state,to_gray=True)).float().to(device)
+    tmp = state_.repeat((N,1,1)).to(device)
     return tmp.unsqueeze(dim=0)    
 
 def policy(qvalues,eps = None):
@@ -78,10 +81,10 @@ class ExperienceReplay:
         ind = np.random.choice(np.arange(len(self.memory)),batch_size,replace=False)
         # any data can be chosen at most once
         batch = [self.memory[i] for i in ind]
-        state1_batch = torch.stack([x[0].squeeze(dim=0) for x in batch],dim=0)
-        action_batch = torch.Tensor([x[1] for x in batch]).long() 
-        reward_batch = torch.Tensor([x[2] for x in batch]) 
-        state2_batch = torch.stack([x[3].squeeze(dim=0) for x in batch],dim=0)
+        state1_batch = torch.stack([x[0].squeeze(dim=0) for x in batch],dim=0).to(device)
+        action_batch = torch.Tensor([x[1] for x in batch]).long().to(device)
+        reward_batch = torch.Tensor([x[2] for x in batch]).to(device)
+        state2_batch = torch.stack([x[3].squeeze(dim=0) for x in batch],dim=0).to(device)
         return state1_batch,action_batch,reward_batch,state2_batch
     
 class Phi (torch.nn.Module):
@@ -122,8 +125,8 @@ class Fnet(torch.nn.Module):
         self.l2 = torch.nn.Linear(256,288)
                 
     def forward(self,state,action):
-        action_ = torch.zeros(action.shape[0],12)
-        indicies = torch.stack((torch.arange(state.shape[0]),action.squeeze()),dim=0)
+        action_ = torch.zeros(action.shape[0],12).to(device)
+        indicies = torch.stack((torch.arange(state.shape[0]).to(device),action.squeeze()),dim=0)
         indicies = indicies.tolist()
         action_[indicies] = 1
         x = torch.cat((state,action_),dim=1)
@@ -168,8 +171,8 @@ def reset_env():
     return state1
 
 def ICM(state1, action, state2, forward_scale = 1 , inverse_scale = 1e4):
-    state1_phi = encoder(state1)
-    state2_phi = encoder(state2)
+    state1_phi = encoder(state1).to(device)
+    state2_phi = encoder(state2).to(device)
     state2_phi_predict = forward_model(state1_phi.detach(),action.detach())
     forward_pred_error = forward_loss(state2_phi_predict, state2_phi.detach()).sum(dim=1).unsqueeze(dim=1)
     forward_pred_error *= forward_scale
@@ -182,11 +185,11 @@ def ICM(state1, action, state2, forward_scale = 1 , inverse_scale = 1e4):
 
 def minibacth_train(use_extrinsic = True):
     state1_batch, action_batch, reward_batch,state2_batch = replay.get_batch()
-    action_batch = action_batch.view(action_batch.shape[0],1)
-    reward_batch = reward_batch.view(reward_batch.shape[0],1)
+    action_batch = action_batch.view(action_batch.shape[0],1).to(device)
+    reward_batch = reward_batch.view(reward_batch.shape[0],1).to(device)
     forward_pred_error, inverse_pred_error = ICM(state1_batch,action_batch,state2_batch)    
     
-    intrinsic_reward = forward_pred_error.detach()
+    intrinsic_reward = forward_pred_error.detach().to(device)
     intrinsic_reward *= params['eta']
     
     reward = intrinsic_reward
@@ -202,7 +205,7 @@ def minibacth_train(use_extrinsic = True):
 
 
     #indices : convert into one hot
-    indices = torch.stack((torch.arange(action_batch.shape[0]),action_batch.squeeze()),dim=0)
+    indices = torch.stack((torch.arange(action_batch.shape[0]).to(device),action_batch.squeeze()),dim=0).to(device)
     indices = indices.tolist()
     
     ret_target[indices] = ret.squeeze()
@@ -228,10 +231,10 @@ params = {
 }
 
 replay = ExperienceReplay(N = 1000,batch_size=params['batch_size'])
-Qmodel = QNetwork()
-encoder = Phi()
-forward_model = Fnet()
-inverse_model = Gnet()
+Qmodel = QNetwork().to(device)
+encoder = Phi().to(device)
+forward_model = Fnet().to(device)
+inverse_model = Gnet().to(device)
 qloss = torch.nn.MSELoss()
 forward_loss = torch.nn.MSELoss(reduction='none')
 inverse_loss = torch.nn.CrossEntropyLoss(reduction='none')
@@ -239,7 +242,7 @@ all_model_params = list(Qmodel.parameters()) + list(encoder.parameters()) + list
 optim = torch.optim.Adam(lr=0.001,params=all_model_params)
 
 
-epochs = 5000
+epochs = 2000
 env.reset()
 
 state1 = prepare_initial_state(env.render('rgb_array'))
@@ -304,7 +307,7 @@ for i in range(epochs):
     if len(replay.memory) < params['batch_size']:
         continue
 
-    forward_pred_error,inverse_pred_error,q_loss = minibacth_train(use_extrinsic=False)
+    forward_pred_error,inverse_pred_error,q_loss = minibacth_train(use_extrinsic=True)
     loss = loss_fn(q_loss,forward_pred_error,inverse_pred_error)
     loss_list = (q_loss.mean(),forward_pred_error.flatten().mean(),inverse_pred_error.flatten().mean())
     losses.append(loss_list)
@@ -317,16 +320,18 @@ for i in range(epochs):
 eps=0.1
 done = True
 state_deque = deque(maxlen=params['frames_per_state'])
+x_pos = 40
 for step in range(5000):  
   if (step % 12 == 0): 
-    print(step,env.env.env._x_position)
+    print(step,x_pos)
     plt.imshow(env.render('rgb_array'))
-    plt.pause(0.05)
+    plt.pause(0.02)
   if done:
     env.reset()
     state1 = prepare_initial_state(env.render('rgb_array'))
   q_val_pred = Qmodel(state1)
-  action = int(policy(q_val_pred,eps))
+  action = int(policy(q_val_pred))
   state2, reward, done, info = env.step(action)
+  x_pos = info['x_pos']
   state2 = prepare_multi_state(state1,state2)
   state1=state2

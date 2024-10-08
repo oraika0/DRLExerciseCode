@@ -231,7 +231,7 @@ def minibatch_train(use_extrinsic=True):
 
 
 
-epochs = 5000
+epochs = 1000
 env.reset()
 state1 = prepare_initial_state(env.render('rgb_array'))
 eps=0.15
@@ -277,7 +277,7 @@ for i in range(epochs):
     state1 = state2
   if len(replay.memory) < params['batch_size']:
     continue
-  forward_pred_err, inverse_pred_err, q_loss = minibatch_train(use_extrinsic=False) #根據從經驗池選出的一小批次資料，計算各模型的誤差
+  forward_pred_err, inverse_pred_err, q_loss = minibatch_train(use_extrinsic=True) #根據從經驗池選出的一小批次資料，計算各模型的誤差
   loss = loss_fn(q_loss, forward_pred_err, inverse_pred_err) #計算整體損失
   loss_list = (q_loss.mean(), forward_pred_err.flatten().mean(), inverse_pred_err.flatten().mean())
   losses.append(loss_list)
@@ -292,9 +292,8 @@ steps = 40
 for step in range(5000):  
   if (step % 12 == 0): 
     print(steps)
-    plt.pause(0.05)
-    plt.figure(figsize = (8,8))
     plt.imshow(env.render('rgb_array'))
+    plt.pause(0.05)
   if done:
     env.reset()
     state1 = prepare_initial_state(env.render('rgb_array'))
