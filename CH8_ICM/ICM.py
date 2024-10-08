@@ -30,7 +30,7 @@ def prepare_multi_state(state1,state2):
     return state1
     
 def prepare_initial_state(state,N=3):
-    state_ = torch.from_numpy(downscale_obs(state)).float()
+    state_ = torch.from_numpy(downscale_obs(state,to_gray=True)).float()
     tmp = state_.repeat((N,1,1))
     return tmp.unsqueeze(dim=0)    
 
@@ -112,7 +112,7 @@ class Gnet(torch.nn.Module):
         y = self.l1(x)
         y = torch.nn.functional.relu(y)
         y = self.l2(y)
-        y = torch.nn.Softmax(y,dim=1)
+        y = torch.nn.functional.softmax(y,dim=1)
         return y        
 
 class Fnet(torch.nn.Module):
@@ -156,8 +156,8 @@ class QNetwork (torch.nn.Module):
         return y 
 
 def loss_fn(qloss,forward_loss,inverse_loss):
-    loss_ = (1-params['beta']) * forward_loss
-    loss_ += params['beta'] * inverse_loss
+    loss_ = (1-params['beta']) * inverse_loss
+    loss_ += params['beta'] * forward_loss
     loss_ = loss_.sum() / loss_.flatten().shape[0]
     loss = loss_ + params['lambda'] * qloss
     return loss
@@ -184,7 +184,7 @@ def minibacth_train(use_extrinsic = True):
     state1_batch, action_batch, reward_batch,state2_batch = replay.get_batch()
     action_batch = action_batch.view(action_batch.shape[0],1)
     reward_batch = reward_batch.view(reward_batch.shape[0],1)
-    forward_pred_error, inverse_pred_error = ICM(state1_batch,action_batch,reward_batch)    
+    forward_pred_error, inverse_pred_error = ICM(state1_batch,action_batch,state2_batch)    
     
     intrinsic_reward = forward_pred_error.detach()
     intrinsic_reward *= params['eta']
@@ -305,7 +305,7 @@ for i in range(epochs):
         continue
 
     forward_pred_error,inverse_pred_error,q_loss = minibacth_train(use_extrinsic=False)
-    loss = loss_fn(q_loss,forward_loss,inverse_loss)
+    loss = loss_fn(q_loss,forward_pred_error,inverse_pred_error)
     loss_list = (q_loss.mean(),forward_pred_error.flatten().mean(),inverse_pred_error.flatten().mean())
     losses.append(loss_list)
     loss.backward()

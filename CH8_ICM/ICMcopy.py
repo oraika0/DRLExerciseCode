@@ -231,7 +231,6 @@ def minibatch_train(use_extrinsic=True):
 
 
 
-from IPython.display import clear_output
 epochs = 5000
 env.reset()
 state1 = prepare_initial_state(env.render('rgb_array'))
@@ -246,7 +245,6 @@ ep_lengths = []
 use_extrinsic = False #不使用外在回饋值
 for i in range(epochs):
   print("Epochs:",i," Game progress:",last_x_pos)      
-  clear_output(wait=True)
   opt.zero_grad()
   episode_length += 1
   q_val_pred = Qmodel(state1) #運行DQN並預測一個動作價值向量
@@ -297,7 +295,6 @@ for step in range(5000):
     plt.pause(0.05)
     plt.figure(figsize = (8,8))
     plt.imshow(env.render('rgb_array'))
-    clear_output(wait=True)
   if done:
     env.reset()
     state1 = prepare_initial_state(env.render('rgb_array'))
