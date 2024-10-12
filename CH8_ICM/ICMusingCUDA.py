@@ -221,12 +221,12 @@ done = True
 params = {
     'batch_size' :150,
     'beta' : 0.2,
-    'lambda' : 0.1,
+    'lambda' : 0.9,
     'eta' : 1, #rate between intricsic and extrinsic reward
     'gamma' : 0.2,
-    'max_episode_len' : 100,
+    'max_episode_len' : 1500,
     'min_progress' : 15,
-    'action_repeats' : 6, #被選到的action 在訓練時會連做6次
+    'action_repeats' : 3, #被選到的action 在訓練時會連做6次
     'frames_per_state' : 3 
 }
 
@@ -242,14 +242,14 @@ all_model_params = list(Qmodel.parameters()) + list(encoder.parameters()) + list
 optim = torch.optim.Adam(lr=0.001,params=all_model_params)
 
 
-epochs = 2000
+epochs = 20000
 env.reset()
 
 state1 = prepare_initial_state(env.render('rgb_array'))
 eps = 0.15
 losses = []
 episode_length = 0
-switch_to_eqs_greedy = 1000
+switch_to_eqs_greedy = 10000
 state_deque = deque(maxlen = params['frames_per_state'])
 e_reward = 0
 
@@ -258,7 +258,8 @@ last_x_pos = 40
 ep_lengths = []
 use_explicit = False
 for i in range(epochs):
-    print('Epochs', i, ':' , 'x_pos',last_x_pos)
+    if (i % 100 == 0):
+        print('Epochs', i, ':' , 'x_pos',last_x_pos)
     optim.zero_grad()
     episode_length += 1
     q_val_pred = Qmodel(state1)
@@ -291,6 +292,7 @@ for i in range(epochs):
     e_reward = 0
     if episode_length > params['max_episode_len']:
         if (info['x_pos'] - last_x_pos) < params['min_progress']:
+            print("min_progress")
             done = True
         else :
             last_x_pos = info['x_pos']
@@ -314,24 +316,33 @@ for i in range(epochs):
     loss.backward()
     optim.step()
     
-    
-    
+torch.save(Qmodel.state_dict(), "Qmodel.pth")
+torch.save(encoder.state_dict(), "encoder.pth")
+torch.save(forward_model.state_dict(), "forward_model.pth")
+torch.save(inverse_model.state_dict(), "inverse_model.pth")
     
 eps=0.1
 done = True
 state_deque = deque(maxlen=params['frames_per_state'])
 x_pos = 40
+stuckCounter = 0
+
+
 for step in range(5000):  
-  if (step % 12 == 0): 
+  if (step % 10 == 0): 
     print(step,x_pos)
     plt.imshow(env.render('rgb_array'))
-    plt.pause(0.02)
-  if done:
+    plt.pause(0.00005)
+  if done or (stuckCounter == 100) :
+    stuckCounter = 0
     env.reset()
     state1 = prepare_initial_state(env.render('rgb_array'))
   q_val_pred = Qmodel(state1)
-  action = int(policy(q_val_pred))
+  action = int(policy(q_val_pred,eps))
   state2, reward, done, info = env.step(action)
+  if(x_pos == info['x_pos']):
+    stuckCounter += 1
   x_pos = info['x_pos']
+  
   state2 = prepare_multi_state(state1,state2)
   state1=state2

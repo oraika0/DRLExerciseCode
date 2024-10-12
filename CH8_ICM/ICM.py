@@ -221,7 +221,7 @@ params = {
     'lambda' : 0.1,
     'eta' : 1, #rate between intricsic and extrinsic reward
     'gamma' : 0.2,
-    'max_episode_len' : 100,
+    'max_episode_len' : 600,
     'min_progress' : 15,
     'action_repeats' : 6, #被選到的action 在訓練時會連做6次
     'frames_per_state' : 3 
@@ -274,6 +274,9 @@ for i in range(epochs):
     ###### 而是一次看連續三個frame的 即(0、1、2) 、(6、7、8)
     #所以與其說是給他看三個frame更像是給他看目前的動作在幹嘛
     ########################################################################
+    
+    
+    ##########1430
     for j in range(params['action_repeats']):
         state2, e_reward_, done, info = env.step(action)
         last_x_pos = info['x_pos']
