@@ -221,12 +221,12 @@ done = True
 params = {
     'batch_size' :150,
     'beta' : 0.2,
-    'lambda' : 0.9,
+    'lambda' : 0.2,
     'eta' : 1, #rate between intricsic and extrinsic reward
     'gamma' : 0.2,
     'max_episode_len' : 1500,
     'min_progress' : 15,
-    'action_repeats' : 3, #被選到的action 在訓練時會連做6次
+    'action_repeats' : 6, #被選到的action 在訓練時會連做6次
     'frames_per_state' : 3 
 }
 
@@ -242,14 +242,14 @@ all_model_params = list(Qmodel.parameters()) + list(encoder.parameters()) + list
 optim = torch.optim.Adam(lr=0.001,params=all_model_params)
 
 
-epochs = 20000
+epochs = 30000
 env.reset()
 
 state1 = prepare_initial_state(env.render('rgb_array'))
 eps = 0.15
 losses = []
 episode_length = 0
-switch_to_eqs_greedy = 10000
+switch_to_eqs_greedy = 20000
 state_deque = deque(maxlen = params['frames_per_state'])
 e_reward = 0
 

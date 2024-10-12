@@ -52,7 +52,8 @@ def policy(qvalues,eps = None,tau = None):
         else:
             return torch.argmax(qvalues)
     else:
-        qvalues /= tau
+        if tau is not None:
+            qvalues /= tau
         return torch.multinomial(torch.nn.functional.softmax(torch.nn.functional.normalize(qvalues)),num_samples=1)
 
 class Phi (torch.nn.Module):
@@ -192,7 +193,7 @@ pygame.init()
 screen = pygame.display.set_mode((1200, 600))
 pygame.display.set_caption("Super Mario Bros Control")
 scale_factor = 2.5# Create the environment
-env = gym_super_mario_bros.make('SuperMarioBros-v0')
+env = gym_super_mario_bros.make('SuperMarioBros-v0',)
 env = JoypadSpace(env, COMPLEX_MOVEMENT)
 reset_env()
 done = True
@@ -213,14 +214,14 @@ while True:
         state1 = prepare_initial_state(current_frame)
     q_val_pred = Qmodel(state1)
     # action = int(policy(q_val_pred,eps))
-    action = int(policy(q_val_pred,eps= 0.07))
+    action = int(policy(q_val_pred,eps=0.3))
     
     
     
     
     
     for i in range(1):
-        if done or (stuckCounter == 500) :
+        if done or (stuckCounter == 200) :
             stuckCounter = 0
             env.reset()
             state1 = prepare_initial_state(current_frame)
@@ -236,7 +237,7 @@ while True:
 
 
 
-        if (step_counter % 2 == 0):
+        if (step_counter % 6 == 0):
             output_frame1 = downscale_frame
             output_frame1 = np.stack((output_frame1,)*3, axis=-1)
             output_frame1 = (output_frame1 * 255).astype(np.uint8)
@@ -260,5 +261,5 @@ while True:
             pygame.display.update()  # Update the display
     
             # Control the frame rate
-            clock.tick(500)  # Adjust this value to control the speed of the game
+            clock.tick(1000)  # Adjust this value to control the speed of the game
     
