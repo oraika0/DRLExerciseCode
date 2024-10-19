@@ -205,9 +205,10 @@ action = 0  # Initialize action to idle
 clock = pygame.time.Clock()
 
 step_counter = 0
+step_counter_policy = 0
 while True:
     step_counter += 1
-    
+    step_counter_policy += 1
     current_frame = env.render('rgb_array')
     downscale_frame = downscale_obs(current_frame)
     if done or (stuckCounter == 500) :
@@ -216,8 +217,13 @@ while True:
         state1 = prepare_initial_state(current_frame)
     q_val_pred = Qmodel(state1)
     # action = int(policy(q_val_pred,eps))
-    action = int(policy(q_val_pred,tau=0.8))
     
+    
+    if  (int(step_counter_policy / 100) % 2 == 0):
+        action = int(policy(q_val_pred))
+    else:
+        action = int(policy(q_val_pred,eps))
+        
     
     
     

@@ -214,13 +214,13 @@ while True:
         state1 = prepare_initial_state(current_frame)
     q_val_pred = Qmodel(state1)
     # action = int(policy(q_val_pred,eps))
-    action = int(policy(q_val_pred,eps=0.3))
+    action = int(policy(q_val_pred,eps=0.1))
     
     
     
     
     
-    for i in range(1):
+    for i in range(3):
         if done or (stuckCounter == 200) :
             stuckCounter = 0
             env.reset()

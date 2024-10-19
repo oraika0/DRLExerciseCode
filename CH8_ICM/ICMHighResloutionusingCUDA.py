@@ -195,7 +195,7 @@ def minibacth_train(use_extrinsic = True):
     intrinsic_reward *= params['eta']
     
     reward = intrinsic_reward
-    
+    # print('intrinsic reward:',reward)
     if use_extrinsic :
         reward += reward_batch
 
@@ -223,13 +223,14 @@ done = True
 params = {
     'batch_size' :150,
     'beta' : 0.2,
-    'lambda' : 0.2,
+    'lambda' : 0.1,
     'eta' : 1, #rate between intricsic and extrinsic reward
     'gamma' : 0.2,
-    'max_episode_len' : 1500,
+    'max_episode_len' : 100,
     'min_progress' : 15,
     'action_repeats' : 6, #被選到的action 在訓練時會連做6次
-    'frames_per_state' : 3 
+    'frames_per_state' : 3,
+    'max_episode_update_cycle' : 100
 }
 
 replay = ExperienceReplay(N = 1000,batch_size=params['batch_size'])
@@ -244,14 +245,15 @@ all_model_params = list(Qmodel.parameters()) + list(encoder.parameters()) + list
 optim = torch.optim.Adam(lr=0.001,params=all_model_params)
 
 
-epochs = 30000
+epochs = 150000
+max_eps_len_increase_rate = int((3000 - params['max_episode_len']) / (epochs / params['max_episode_update_cycle']))
 env.reset()
 
 state1 = prepare_initial_state(env.render('rgb_array'))
-eps = 0.15
+eps = 0.15  
 losses = []
 episode_length = 0
-switch_to_eqs_greedy = 20000
+switch_to_eqs_greedy = 100000
 state_deque = deque(maxlen = params['frames_per_state'])
 e_reward = 0
 
@@ -261,6 +263,7 @@ ep_lengths = []
 use_explicit = False
 for i in range(epochs):
     if (i % 100 == 0):
+        params['frames_per_state'] += 5
         print('Epochs', i, ':' , 'x_pos',last_x_pos)
     optim.zero_grad()
     episode_length += 1
@@ -283,12 +286,16 @@ for i in range(epochs):
     for j in range(params['action_repeats']):
         state2, e_reward_, done, info = env.step(action)
         last_x_pos = info['x_pos']
+        
         if done :
             state1 = reset_env()
             break
         
+        # print('extrinsic reward each 6 action',e_reward_)
         e_reward += e_reward_
         state_deque.append(prepare_state(state2))
+    
+    params['max_episode_len'] += max_eps_len_increase_rate
     state2 = torch.stack(list(state_deque),dim = 1)
     replay.add_memory(state1,action,e_reward,state2)
     e_reward = 0
@@ -311,7 +318,7 @@ for i in range(epochs):
     if len(replay.memory) < params['batch_size']:
         continue
 
-    forward_pred_error,inverse_pred_error,q_loss = minibacth_train(use_extrinsic=False)
+    forward_pred_error,inverse_pred_error,q_loss = minibacth_train(use_extrinsic=True)
     loss = loss_fn(q_loss,forward_pred_error,inverse_pred_error)
     loss_list = (q_loss.mean(),forward_pred_error.flatten().mean(),inverse_pred_error.flatten().mean())
     losses.append(loss_list)
@@ -323,7 +330,7 @@ torch.save(encoder.state_dict(), "encoder.pth")
 torch.save(forward_model.state_dict(), "forward_model.pth")
 torch.save(inverse_model.state_dict(), "inverse_model.pth")
     
-eps=0.1
+eps=0.15
 done = True
 state_deque = deque(maxlen=params['frames_per_state'])
 x_pos = 40
