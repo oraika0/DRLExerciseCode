@@ -242,14 +242,14 @@ all_model_params = list(Qmodel.parameters()) + list(encoder.parameters()) + list
 optim = torch.optim.Adam(lr=0.001,params=all_model_params)
 
 
-epochs = 30000
+epochs = 150000
 env.reset()
 
 state1 = prepare_initial_state(env.render('rgb_array'))
 eps = 0.15
 losses = []
 episode_length = 0
-switch_to_eqs_greedy = 20000
+switch_to_eqs_greedy = 75000
 state_deque = deque(maxlen = params['frames_per_state'])
 e_reward = 0
 
@@ -309,13 +309,42 @@ for i in range(epochs):
     if len(replay.memory) < params['batch_size']:
         continue
 
-    forward_pred_error,inverse_pred_error,q_loss = minibacth_train(use_extrinsic=True)
+    forward_pred_error,inverse_pred_error,q_loss = minibacth_train(use_extrinsic=False)
     loss = loss_fn(q_loss,forward_pred_error,inverse_pred_error)
     loss_list = (q_loss.mean(),forward_pred_error.flatten().mean(),inverse_pred_error.flatten().mean())
     losses.append(loss_list)
     loss.backward()
     optim.step()
     
+    if(i == 37500):
+        torch.save(Qmodel.state_dict(), "Qmodel37500.pth")
+        torch.save(encoder.state_dict(), "encoder37500.pth")
+        torch.save(forward_model.state_dict(), "forward_model37500.pth")
+        torch.save(inverse_model.state_dict(), "inverse_model37500.pth")
+    elif(i == 75000):
+        torch.save(Qmodel.state_dict(), "Qmodel75000.pth")
+        torch.save(forward_model.state_dict(), "forward_model75000.pth")
+        torch.save(encoder.state_dict(), "encoder75000.pth")
+        torch.save(inverse_model.state_dict(), "inverse_model75000.pth")
+    elif(i == 112500):
+        torch.save(Qmodel.state_dict(), "Qmodel1125.pth")
+        torch.save(encoder.state_dict(), "encoder1125.pth")
+        torch.save(forward_model.state_dict(), "forward_model1125.pth")
+        torch.save(inverse_model.state_dict(), "inverse_model11125.pth")
+# losses_ = np.array([loss.cpu().numpy() for loss in losses])
+losses_ = np.array([loss[0].cpu().detach().numpy() for loss in losses])
+
+plt.figure(figsize = (14,12))
+plt.plot(np.log(losses_[:,0]),label='Q loss')
+plt.plot(np.log(losses_[:,1]),label='Forward loss')
+plt.plot(np.log(losses_[:,2]),label='Inverse loss')
+plt.legend()
+plt.show()
+
+plt.figure(figsize = (14,12))
+plt.plot(np.array(ep_lengths), label='Episode length')
+plt.show()
+
 torch.save(Qmodel.state_dict(), "Qmodel.pth")
 torch.save(encoder.state_dict(), "encoder.pth")
 torch.save(forward_model.state_dict(), "forward_model.pth")
@@ -332,16 +361,13 @@ for step in range(5000):
   if (step % 10 == 0): 
     print(step,x_pos)
     plt.imshow(env.render('rgb_array'))
-    plt.pause(0.00005)
-  if done or (stuckCounter == 100) :
-    stuckCounter = 0
+    plt.pause(0.05)
+  if done :
     env.reset()
     state1 = prepare_initial_state(env.render('rgb_array'))
   q_val_pred = Qmodel(state1)
   action = int(policy(q_val_pred,eps))
   state2, reward, done, info = env.step(action)
-  if(x_pos == info['x_pos']):
-    stuckCounter += 1
   x_pos = info['x_pos']
   
   state2 = prepare_multi_state(state1,state2)

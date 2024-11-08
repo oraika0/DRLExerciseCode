@@ -10,7 +10,7 @@ pygame.init()
 screen = pygame.display.set_mode((800, 600))
 pygame.display.set_caption("Super Mario Bros Control")
 scale_factor = 2.5# Create the environment
-env = gym_super_mario_bros.make('SuperMarioBros-v0')
+env = gym_super_mario_bros.make('SuperMarioBros-1-3-v0')
 env = JoypadSpace(env, COMPLEX_MOVEMENT)
 
 done = True

@@ -180,7 +180,7 @@ def ICM(state1, action, state2, forward_scale = 1 , inverse_scale = 1e4):
     
     return forward_pred_error , inverse_pred_error
 
-def minibacth_train(use_extrinsic = True):
+def minibatch_train(use_extrinsic = True):
     state1_batch, action_batch, reward_batch,state2_batch = replay.get_batch()
     action_batch = action_batch.view(action_batch.shape[0],1)
     reward_batch = reward_batch.view(reward_batch.shape[0],1)
@@ -216,15 +216,15 @@ env = JoypadSpace(env,COMPLEX_MOVEMENT)
 done = True 
 
 params = {
-    'batch_size' :150,
-    'beta' : 0.2,
-    'lambda' : 0.1,
-    'eta' : 1, #rate between intricsic and extrinsic reward
-    'gamma' : 0.2,
-    'max_episode_len' : 600,
-    'min_progress' : 15,
-    'action_repeats' : 6, #被選到的action 在訓練時會連做6次
-    'frames_per_state' : 3 
+    'batch_size' :150,      #DQN batch
+    'beta' : 0.2,           #rate between forward and inverse
+    'lambda' : 0.1,         #rate between policy and ICM
+    'eta' : 1.0,            #rate between intricsic and extrinsic rew
+    'gamma' : 0.2,          #discount factor
+    'max_episode_len' : 100,
+    'min_progress' : 15,    #每max_episode_len至少要前進15
+    'action_repeats' : 6,   #被選到的action 在訓練時會連做6次
+    'frames_per_state' : 3  
 }
 
 replay = ExperienceReplay(N = 1000,batch_size=params['batch_size'])
@@ -273,10 +273,9 @@ for i in range(epochs):
     ###### 不是每6個frame留一個 變成 看(0、6、12) 、(6、12 、 18)的資料
     ###### 而是一次看連續三個frame的 即(0、1、2) 、(6、7、8)
     #所以與其說是給他看三個frame更像是給他看目前的動作在幹嘛
-    ########################################################################
+    #######################################################################
     
-    
-    ##########1430
+
     for j in range(params['action_repeats']):
         state2, e_reward_, done, info = env.step(action)
         last_x_pos = info['x_pos']
@@ -307,16 +306,28 @@ for i in range(epochs):
     if len(replay.memory) < params['batch_size']:
         continue
 
-    forward_pred_error,inverse_pred_error,q_loss = minibacth_train(use_extrinsic=False)
+    forward_pred_error,inverse_pred_error,q_loss = minibatch_train(use_extrinsic=False)
     loss = loss_fn(q_loss,forward_pred_error,inverse_pred_error)
     loss_list = (q_loss.mean(),forward_pred_error.flatten().mean(),inverse_pred_error.flatten().mean())
     losses.append(loss_list)
     loss.backward()
     optim.step()
     
-    
-    
-    
+torch.save(Qmodel.state_dict(), "Qmodel.pth")
+torch.save(encoder.state_dict(), "encoder.pth")
+torch.save(forward_model.state_dict(), "forward_model.pth")
+torch.save(inverse_model.state_dict(), "inverse_model.pth")
+
+losses_ = np.array(losses)
+plt.figure(figsize = (14,12))
+plt.plot(np.log(losses_[:,0]),label='Q loss')
+plt.plot(np.log(losses_[:,1]),label='Forward loss')
+plt.plot(np.log(losses_[:,2]),label='Inverse loss')
+plt.legend()
+plt.show()
+plt.figure(figsize = (14,12))
+plt.plot(np.array(ep_lengths), label='Episode length')
+
 eps=0.1
 done = True
 state_deque = deque(maxlen=params['frames_per_state'])

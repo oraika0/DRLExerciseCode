@@ -145,10 +145,10 @@ def ICM(state1, action, state2, forward_scale = 1 , inverse_scale = 1e4):
     
     return forward_pred_error , inverse_pred_error
 
-env = gym_super_mario_bros.make('SuperMarioBros-v0')
-env = JoypadSpace(env,COMPLEX_MOVEMENT)
-reset_env()
-done = True 
+# env = gym_super_mario_bros.make('SuperMarioBros-2-1-v0')
+# env = JoypadSpace(env,COMPLEX_MOVEMENT)
+# reset_env()
+# done = True 
 
 params = {
     'batch_size' :150,
@@ -193,7 +193,7 @@ pygame.init()
 screen = pygame.display.set_mode((1200, 600))
 pygame.display.set_caption("Super Mario Bros Control")
 scale_factor = 2.5# Create the environment
-env = gym_super_mario_bros.make('SuperMarioBros-v0',)
+env = gym_super_mario_bros.make('SuperMarioBros-1-1-v0',)
 env = JoypadSpace(env, COMPLEX_MOVEMENT)
 reset_env()
 done = True
@@ -214,13 +214,13 @@ while True:
         state1 = prepare_initial_state(current_frame)
     q_val_pred = Qmodel(state1)
     # action = int(policy(q_val_pred,eps))
-    action = int(policy(q_val_pred,eps=0.1))
+    action = int(policy(q_val_pred,eps=0.07))
     
     
     
     
     
-    for i in range(3):
+    for i in range(1):
         if done or (stuckCounter == 200) :
             stuckCounter = 0
             env.reset()
@@ -237,7 +237,7 @@ while True:
 
 
 
-        if (step_counter % 6 == 0):
+        if (step_counter % 2 == 0):
             output_frame1 = downscale_frame
             output_frame1 = np.stack((output_frame1,)*3, axis=-1)
             output_frame1 = (output_frame1 * 255).astype(np.uint8)
