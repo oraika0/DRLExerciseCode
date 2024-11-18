@@ -245,6 +245,7 @@ env.reset()
 state1 = prepare_initial_state(env.render('rgb_array'))
 eps = 0.15
 losses = []
+e_rewards = []
 episode_length = 0
 switch_to_eqs_greedy = 1000
 state_deque = deque(maxlen = params['frames_per_state'])
@@ -287,7 +288,9 @@ for i in range(epochs):
         state_deque.append(prepare_state(state2))
     state2 = torch.stack(list(state_deque),dim = 1)
     replay.add_memory(state1,action,e_reward,state2)
+ 
     e_reward = 0
+    
     if episode_length > params['max_episode_len']:
         if (info['x_pos'] - last_x_pos) < params['min_progress']:
             done = True
@@ -325,8 +328,8 @@ torch.save(inverse_model.state_dict(), "inverse_model.pth")
 # plt.plot(np.log(losses_[:,2]),label='Inverse loss')
 # plt.legend()
 # plt.show()
-# plt.figure(figsize = (14,12))
-# plt.plot(np.array(ep_lengths), label='Episode length')
+plt.figure(figsize = (14,12))
+plt.plot(np.array(ep_lengths), label='Episode length')
 
 eps=0.1
 done = True
